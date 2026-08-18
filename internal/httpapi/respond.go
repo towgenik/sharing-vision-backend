@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 // writeJSON serialises v as JSON with the given status code.
@@ -20,16 +19,4 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 // writeErr sends a standard error envelope.
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
-}
-
-// atoiDefault parses an integer query value, falling back to def.
-func atoiDefault(s string, def int) int {
-	if s == "" {
-		return def
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return def
-	}
-	return n
 }

@@ -3,11 +3,13 @@ package post
 import (
 	"database/sql"
 	"errors"
-	"math"
 )
 
 // ErrNotFound is returned when an article id does not exist.
 var ErrNotFound = errors.New("post not found")
+
+// ListMaxLimit caps how many rows a single list request may return.
+const ListMaxLimit = 100
 
 // MySQLRepository implements Repository on top of a *sql.DB.
 type MySQLRepository struct {
@@ -54,20 +56,42 @@ func (s *MySQLRepository) Create(a *Article) (*Article, error) {
 	return s.Get(id)
 }
 
-// List returns all articles, optionally filtered by status.
-func (s *MySQLRepository) List(status string) ([]Article, error) {
-	if status == "" {
-		rows, err := s.DB.Query("SELECT " + cols + " FROM posts ORDER BY `Id` DESC")
-		if err != nil {
-			return nil, err
-		}
-		return mapRows(rows)
+// List returns one page of rows ordered newest first, optionally filtered by
+// status, plus the total row count matching the filter (before pagination).
+func (s *MySQLRepository) List(limit, offset int, status string) ([]Article, int64, error) {
+	if limit < 1 {
+		limit = 10
 	}
-	rows, err := s.DB.Query("SELECT "+cols+" FROM posts WHERE `Status` = ? ORDER BY `Id` DESC", status)
+	if limit > ListMaxLimit {
+		limit = ListMaxLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	where := ""
+	args := []any{}
+	if status != "" {
+		where = "WHERE `Status` = ?"
+		args = append(args, status)
+	}
+
+	var total int64
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM posts "+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.DB.Query(
+		"SELECT "+cols+" FROM posts "+where+" ORDER BY `Id` DESC LIMIT ? OFFSET ?",
+		append(args, limit, offset)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return mapRows(rows)
+	list, err := mapRows(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
 }
 
 // Get returns a single article by id.
@@ -104,42 +128,6 @@ func (s *MySQLRepository) Trash(id int64) error {
 		return ErrNotFound
 	}
 	return nil
-}
-
-// Preview returns a page of published articles plus the total count.
-func (s *MySQLRepository) Preview(page, perPage int) ([]Article, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = 10
-	}
-	if perPage > 100 {
-		perPage = 100
-	}
-	var total int64
-	if err := s.DB.QueryRow("SELECT COUNT(*) FROM posts WHERE `Status` = ?", StatusPublish).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-	rows, err := s.DB.Query(
-		"SELECT "+cols+" FROM posts WHERE `Status` = ? ORDER BY `Updated_date` DESC, `Id` DESC LIMIT ? OFFSET ?",
-		StatusPublish, perPage, (page-1)*perPage)
-	if err != nil {
-		return nil, 0, err
-	}
-	list, err := mapRows(rows)
-	if err != nil {
-		return nil, 0, err
-	}
-	return list, total, nil
-}
-
-// TotalPages yields the pagination bucket count.
-func TotalPages(total int64, perPage int) int64 {
-	if perPage < 1 {
-		perPage = 1
-	}
-	return int64(math.Ceil(float64(total) / float64(perPage)))
 }
 
 var _ Repository = (*MySQLRepository)(nil)

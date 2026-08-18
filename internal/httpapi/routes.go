@@ -11,6 +11,10 @@ import (
 )
 
 // NewRouter builds the HTTP handler tree.
+//
+// The article endpoints are registered on the spec-exact `/article` prefix
+// AND the `/api/article` alias used by the frontend through the nginx
+// `/api` reverse proxy. Both hit the same handlers.
 func NewRouter(repo post.Repository) http.Handler {
 	h := &articleAPI{repo: repo}
 
@@ -26,16 +30,22 @@ func NewRouter(repo post.Repository) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	r.Route("/api/article", func(r chi.Router) {
-		r.Post("/", h.createArticle)       // create
-		r.Get("/", h.listArticles)         // list (all / ?status=)
-		r.Get("/preview", h.previewArticles) // published + pagination (BEFORE /{id})
-		r.Get("/{id}", h.getArticle)       // read one
-		r.Put("/{id}", h.updateArticle)    // full update incl. status
-		r.Delete("/{id}", h.trashArticle)  // trash (soft delete)
-	})
+	r.Route("/article", articleRoutes(h))
+	r.Route("/api/article", articleRoutes(h))
 
 	return r
+}
+
+// articleRoutes wires the article microservice endpoints (spec §3).
+func articleRoutes(h *articleAPI) func(r chi.Router) {
+	return func(r chi.Router) {
+		r.Post("/", h.createArticle)          // 1. create article
+		r.Get("/{limit}/{offset}", h.listArticles) // 2. list w/ limit+offset pagination
+		r.Get("/{id}", h.getArticle)          // 3. read one
+		r.Put("/{id}", h.updateArticle)       // 4. modify (PUT; PATCH also accepted)
+		r.Patch("/{id}", h.updateArticle)
+		r.Delete("/{id}", h.trashArticle)     // 5. delete
+	}
 }
 
 // corsMiddleware allows the public origin and local dev ports.
@@ -44,7 +54,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if isAllowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Vary", "Origin")
 		}

@@ -1,12 +1,7 @@
 package httpapi
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/towgenik/sharing-vision-backend/internal/post"
@@ -14,10 +9,9 @@ import (
 
 // stubRepo is an in-memory Repository for handler tests.
 type stubRepo struct {
-	mu      sync.Mutex
-	nextID  int64
-	rows    []post.Article
-	preview func(page, per int) ([]post.Article, int64, error)
+	mu     sync.Mutex
+	nextID int64
+	rows   []post.Article
 }
 
 func newStub() *stubRepo {
@@ -37,20 +31,34 @@ func (s *stubRepo) Create(a *post.Article) (*post.Article, error) {
 	a.CreatedDate = time.Now()
 	a.UpdatedDate = time.Now()
 	s.nextID++
-	s.rows = append([]post.Article{*a}, s.rows...)
+	s.rows = append(s.rows, *a)
 	return a, nil
 }
 
-func (s *stubRepo) List(status string) ([]post.Article, error) {
+func (s *stubRepo) List(limit, offset int, status string) ([]post.Article, int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := []post.Article{}
+	filtered := []post.Article{}
 	for _, a := range s.rows {
 		if status == "" || a.Status == status {
-			out = append(out, a)
+			filtered = append(filtered, a)
 		}
 	}
-	return out, nil
+	total := int64(len(filtered))
+	if limit < 1 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[offset:end], total, nil
 }
 
 func (s *stubRepo) Get(id int64) (*post.Article, error) {
@@ -87,45 +95,4 @@ func (s *stubRepo) Trash(id int64) error {
 		}
 	}
 	return post.ErrNotFound
-}
-
-func (s *stubRepo) Preview(page, per int) ([]post.Article, int64, error) {
-	if s.preview != nil {
-		return s.preview(page, per)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	published := []post.Article{}
-	for _, a := range s.rows {
-		if a.Status == post.StatusPublish {
-			published = append(published, a)
-		}
-	}
-	return published, int64(len(published)), nil
-}
-
-func doReq(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
-	t.Helper()
-	var r *http.Request
-	if body == "" {
-		r = httptest.NewRequest(method, path, nil)
-	} else {
-		r = httptest.NewRequest(method, path, bytes.NewBufferString(body))
-	}
-	r.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	return w
-}
-
-func decode(t *testing.T, payload []byte, into any) {
-	t.Helper()
-	if err := json.Unmarshal(payload, into); err != nil {
-		t.Fatalf("decode %s: %v", payload, err)
-	}
-}
-
-// tM builds a time.Time offset by n days for ordering assertions.
-func tM(n int64) time.Time {
-	return time.Unix(1700000000+n*86400, 0).UTC()
 }

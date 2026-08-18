@@ -1,0 +1,105 @@
+{
+  "info": {
+    "_postman_id": "9d11e280f2b54a38a4d1f6c7a31b60e4",
+    "name": "Sharing Vision — Article API",
+    "description": "Postman collection for the Sharing Vision backend test (Post Article use case).\n\nEndpoints follow the spec exactly: /article/ (POST), /article/{limit}/{offset} (GET), /article/{id} (GET), /article/{id} (PUT/PATCH), /article/{id} (DELETE).\n\nThe public deployment is https://sv.farrel.moe — set the `baseUrl` collection variable when testing locally (e.g. http://localhost:8080).\n\nValidation (spec §4): Title >= 20 chars, Content >= 200 chars, Category >= 3 chars, Status required (publish|draft|thrash). Validation failures return HTTP 422.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://sv.farrel.moe" },
+    { "key": "articleId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "1. Create article",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"A brand new article for the Sharing Vision backend test\",\n  \"content\": \"This is the body of the article. It needs to be at least two hundred characters long so that it passes the validation rules described in the specification, section four, of the Backend Test. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.\",\n  \"category\": \"Engineering\",\n  \"status\": \"publish\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": { "raw": "{{baseUrl}}/article/", "host": ["{{baseUrl}}"], "path": ["article", ""] },
+        "description": "Creates a new article. Validates: title >= 20, content >= 200, category >= 3, status in {publish, draft, thrash}. Returns 201 with the stored article."
+      },
+      "response": []
+    },
+    {
+      "name": "2. List articles (limit/offset pagination)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/article/10/0",
+          "host": ["{{baseUrl}}"],
+          "path": ["article", "10", "0"]
+        },
+        "description": "Displays all articles with pagination via the {limit}/{offset} path parameters (spec §3 row 2). Response body is a JSON array; the total row count is in the X-Total-Count response header. Append ?status=publish|draft|thrash to filter."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get article by id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/article/{{articleId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["article", "{{articleId}}"]
+        },
+        "description": "Displays the article corresponding to the requested id (spec §3 row 3). Returns 404 when the id does not exist."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Update article by id",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"An updated article title that is long enough to pass validation\",\n  \"content\": \"This article body was edited. It is intentionally longer than two hundred characters so it respects the content minimum from the specification. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog again, and again, and again.\",\n  \"category\": \"Quality\",\n  \"status\": \"draft\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/article/{{articleId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["article", "{{articleId}}"]
+        },
+        "description": "Modifies the article for the requested id (spec §3 row 4). PUT and PATCH are both accepted. Same validation rules as create; failures return 422."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Delete article by id",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/article/{{articleId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["article", "{{articleId}}"]
+        },
+        "description": "Deletes the article for the requested id (spec §3 row 5). Implemented as a soft delete: the row's Status flips to \"thrash\" and remains in the database. Returns 204."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Create article — validation failure demo (422)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"short\",\n  \"content\": \"tiny\",\n  \"category\": \"x\",\n  \"status\": \"bogus\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": { "raw": "{{baseUrl}}/article/", "host": ["{{baseUrl}}"], "path": ["article", ""] },
+        "description": "Demonstrates spec §4 validation: title < 20, content < 200, category < 3 and an invalid status each produce HTTP 422 with an {\"error\": \"...\"} envelope."
+      },
+      "response": []
+    }
+  ]
+}

@@ -11,7 +11,7 @@ type articleAPI struct {
 	repo post.Repository
 }
 
-// createArticle handles POST /api/article/.
+// createArticle handles POST /article/ and POST /api/article/ (spec §3 row 1).
 func (h *articleAPI) createArticle(w http.ResponseWriter, r *http.Request) {
 	var a post.Article
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
@@ -20,7 +20,7 @@ func (h *articleAPI) createArticle(w http.ResponseWriter, r *http.Request) {
 	}
 	post.ApplyDefaults(&a)
 	if err := post.Validate(&a); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	created, err := h.repo.Create(&a)
@@ -31,35 +31,28 @@ func (h *articleAPI) createArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// listArticles handles GET /api/article/ (optional ?status=).
+// listArticles handles GET /article/{limit}/{offset} (spec §3 row 2).
+// Pagination uses limit + offset path parameters; response body is a JSON
+// array, with the total row count carried in the X-Total-Count header.
 func (h *articleAPI) listArticles(w http.ResponseWriter, r *http.Request) {
+	limit, ok1 := posParam(r, "limit")
+	offset, ok2 := nonnegParam(r, "offset")
+	if !ok1 || !ok2 {
+		writeErr(w, http.StatusBadRequest, "limit must be a positive integer and offset a non-negative integer")
+		return
+	}
 	status := r.URL.Query().Get("status")
 	if status != "" && !post.IsValidStatus(status) {
 		writeErr(w, http.StatusBadRequest, "status must be one of publish, draft, thrash")
 		return
 	}
-	list, err := h.repo.List(status)
+	list, total, err := h.repo.List(limit, offset, status)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	hdr := w.Header()
+	hdr.Set("X-Total-Count", itoa(total))
+	hdr.Set("Access-Control-Expose-Headers", "X-Total-Count")
 	writeJSON(w, http.StatusOK, list)
-}
-
-// previewArticles handles GET /api/article/preview (published + pagination).
-func (h *articleAPI) previewArticles(w http.ResponseWriter, r *http.Request) {
-	page := atoiDefault(r.URL.Query().Get("page"), 1)
-	perPage := atoiDefault(r.URL.Query().Get("per_page"), 10)
-	list, total, err := h.repo.Preview(page, perPage)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data":        list,
-		"page":        page,
-		"per_page":    perPage,
-		"total":       total,
-		"total_pages": post.TotalPages(total, perPage),
-	})
 }
