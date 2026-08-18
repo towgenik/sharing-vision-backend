@@ -1,0 +1,15 @@
+# binary
+/api
+/api.exe
+
+# local env
+.env
+.env.local
+
+# editor/os
+.idea/
+.vscode/
+.DS_Store
+
+# coverage
+coverage.out
