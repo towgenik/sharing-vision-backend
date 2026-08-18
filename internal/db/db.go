@@ -77,7 +77,9 @@ func runMigrations(dsn string) error {
 	if err != nil {
 		return err
 	}
-	mysqlURL := fmt.Sprintf("mysql://%s?multiStatements=true", dsn)
+	// The DSN already carries multiStatements=true; migrate's MySQL driver
+	// consumes the same "user:pass@tcp(host:port)/db?query" shape.
+	mysqlURL := "mysql://" + dsn
 	m, err := migrate.NewWithSourceInstance("iofs", src, mysqlURL)
 	if err != nil {
 		return err
