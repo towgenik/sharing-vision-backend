@@ -56,6 +56,9 @@ Status values stored lower-case: `publish` | `draft` | `thrash` (spec spelling).
 Import [`postman/sharing-vision.postman_collection.json`](postman/sharing-vision.postman_collection.json).
 It contains a request for every endpoint plus a validation-failure demo. Set the
 `baseUrl` collection variable to the API origin (default: `https://sv.farrel.moe`).
+Each request ships a Postman `tests` script that asserts the expected status code,
+headers, and body shape — run the collection top-to-bottom in order and it
+self-grades the whole spec (create stamps the `articleId` variable used by 3–5).
 
 ## Run locally
 

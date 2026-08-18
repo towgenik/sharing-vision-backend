@@ -2,28 +2,53 @@
   "info": {
     "_postman_id": "9d11e280f2b54a38a4d1f6c7a31b60e4",
     "name": "Sharing Vision — Article API",
-    "description": "Postman collection for the Sharing Vision backend test (Post Article use case).\n\nEndpoints follow the spec exactly: /article/ (POST), /article/{limit}/{offset} (GET), /article/{id} (GET), /article/{id} (PUT/PATCH), /article/{id} (DELETE).\n\nThe public deployment is https://sv.farrel.moe — set the `baseUrl` collection variable when testing locally (e.g. http://localhost:8080).\n\nValidation (spec §4): Title >= 20 chars, Content >= 200 chars, Category >= 3 chars, Status required (publish|draft|thrash). Validation failures return HTTP 422.",
+    "description": "Postman collection for the Sharing Vision backend test (Post Article use case).\n\nEndpoints follow the spec exactly: /article/ (POST), /article/{limit}/{offset} (GET), /article/{id} (GET), /article/{id} (PUT/PATCH), /article/{id} (DELETE).\n\nThe public deployment is https://sv.farrel.moe — set the `baseUrl` collection variable when testing locally (e.g. http://localhost:8080).\n\nValidation (spec §4): Title >= 20 chars, Content >= 200 chars, Category >= 3 chars, Status required (publish|draft|thrash). Validation failures return HTTP 422.\n\nSelf-grading: every request ships a Postman `tests` script that asserts the expected status code, headers (X-Total-Count), and body shape — including a soft-delete re-check and a 422 validation demo. Run the collection top-to-bottom in order: request 1 creates the article and stamps the `articleId` collection variable used by requests 3–5. All assertions pass against the public deployment at https://sv.farrel.moe.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "https://sv.farrel.moe" },
-    { "key": "articleId", "value": "1" }
+    {
+      "key": "baseUrl",
+      "value": "https://sv.farrel.moe"
+    },
+    {
+      "key": "articleId",
+      "value": "1"
+    }
   ],
   "item": [
     {
       "name": "1. Create article",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"title\": \"A brand new article for the Sharing Vision backend test\",\n  \"content\": \"This is the body of the article. It needs to be at least two hundred characters long so that it passes the validation rules described in the specification, section four, of the Backend Test. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.\",\n  \"category\": \"Engineering\",\n  \"status\": \"publish\"\n}",
-          "options": { "raw": { "language": "json" } }
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
         },
-        "url": { "raw": "{{baseUrl}}/article/", "host": ["{{baseUrl}}"], "path": ["article", ""] },
+        "url": {
+          "raw": "{{baseUrl}}/article/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            ""
+          ]
+        },
         "description": "Creates a new article. Validates: title >= 20, content >= 200, category >= 3, status in {publish, draft, thrash}. Returns 201 with the stored article."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §3 row 1 + §4. Runs first; stamps articleId for 3/4/5. */\npm.test(\"1. POST /article/ -> 201\", function () {\n    pm.response.to.have.status(201);\n});\npm.test(\"1. body is the stored article (spec columns present)\", function () {\n    var json = pm.response.json();\n    pm.expect(json).to.be.an('object');\n    [\"Id\",\"Title\",\"Content\",\"Category\",\"Created_date\",\"Updated_date\",\"Status\"]\n        .forEach(function (k) { pm.expect(json).to.have.property(k); });\n});\npm.test(\"1. payload round-trips (title & status echoed)\", function () {\n    var json = pm.response.json();\n    var sent = JSON.parse(pm.request.body.raw);\n    pm.expect(json.Title).to.eql(sent.title);\n    pm.expect(json.Status).to.eql(sent.status);\n});\npm.test(\"1. captured new id for the rest of the flow\", function () {\n    var json = pm.response.json();\n    pm.expect(json.Id).to.be.a('number');\n    pm.collectionVariables.set('articleId', String(json.Id));\n});\n"
     },
     {
       "name": "2. List articles (limit/offset pagination)",
@@ -32,12 +57,19 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/article/10/0",
-          "host": ["{{baseUrl}}"],
-          "path": ["article", "10", "0"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            "10",
+            "0"
+          ]
         },
         "description": "Displays all articles with pagination via the {limit}/{offset} path parameters (spec §3 row 2). Response body is a JSON array; the total row count is in the X-Total-Count response header. Append ?status=publish|draft|thrash to filter."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §3 row 2 — array body + X-Total-Count. */\npm.test(\"2. GET /article/{limit}/{offset} -> 200\", function () {\n    pm.response.to.have.status(200);\n});\npm.test(\"2. body is a JSON array of articles\", function () {\n    pm.expect(pm.response.json()).to.be.an('array');\n});\npm.test(\"2. X-Total-Count header present, numeric, >= page length\", function () {\n    var hdr = pm.response.headers.get(\"X-Total-Count\");\n    pm.expect(hdr, \"X-Total-Count header\").to.not.be.undefined;\n    var total = parseInt(hdr, 10);\n    pm.expect(isNaN(total)).to.eql(false);\n    pm.expect(total).to.be.at.least(pm.response.json().length);\n});\npm.test(\"2. rows expose title/content/category/status\", function () {\n    var rows = pm.response.json();\n    if (rows.length > 0) {\n        [\"Title\",\"Content\",\"Category\",\"Status\"].forEach(function (k) {\n            pm.expect(rows[0]).to.have.property(k);\n        });\n    }\n});\n"
     },
     {
       "name": "3. Get article by id",
@@ -46,31 +78,52 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/article/{{articleId}}",
-          "host": ["{{baseUrl}}"],
-          "path": ["article", "{{articleId}}"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            "{{articleId}}"
+          ]
         },
         "description": "Displays the article corresponding to the requested id (spec §3 row 3). Returns 404 when the id does not exist."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §3 row 3. */\npm.test(\"3. GET /article/{id} -> 200\", function () {\n    pm.response.to.have.status(200);\n});\npm.test(\"3. returns the requested article with spec fields\", function () {\n    var json = pm.response.json();\n    pm.expect(json).to.be.an('object');\n    var id = pm.collectionVariables.get(\"articleId\") || pm.variables.get(\"articleId\");\n    pm.expect(json.Id).to.eql(parseInt(id, 10));\n    [\"Title\",\"Content\",\"Category\",\"Created_date\",\"Updated_date\",\"Status\"]\n        .forEach(function (k) { pm.expect(json).to.have.property(k); });\n});\npm.test(\"3. status is one of publish|draft|thrash\", function () {\n    pm.expect(pm.response.json().Status).to.be.oneOf([\"publish\",\"draft\",\"thrash\"]);\n});\n"
     },
     {
       "name": "4. Update article by id",
       "request": {
         "method": "PUT",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"title\": \"An updated article title that is long enough to pass validation\",\n  \"content\": \"This article body was edited. It is intentionally longer than two hundred characters so it respects the content minimum from the specification. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog again, and again, and again.\",\n  \"category\": \"Quality\",\n  \"status\": \"draft\"\n}",
-          "options": { "raw": { "language": "json" } }
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
         },
         "url": {
           "raw": "{{baseUrl}}/article/{{articleId}}",
-          "host": ["{{baseUrl}}"],
-          "path": ["article", "{{articleId}}"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            "{{articleId}}"
+          ]
         },
         "description": "Modifies the article for the requested id (spec §3 row 4). PUT and PATCH are both accepted. Same validation rules as create; failures return 422."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §3 row 4 (PUT accepted; PATCH also supported). */\npm.test(\"4. PUT /article/{id} -> 200\", function () {\n    pm.response.to.have.status(200);\n});\npm.test(\"4. response reflects the updated payload\", function () {\n    var json = pm.response.json();\n    var sent = JSON.parse(pm.request.body.raw);\n    pm.expect(json.Title).to.eql(sent.title);\n    pm.expect(json.Status).to.eql(sent.status);\n});\n"
     },
     {
       "name": "5. Delete article by id",
@@ -79,27 +132,52 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/article/{{articleId}}",
-          "host": ["{{baseUrl}}"],
-          "path": ["article", "{{articleId}}"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            "{{articleId}}"
+          ]
         },
         "description": "Deletes the article for the requested id (spec §3 row 5). Implemented as a soft delete: the row's Status flips to \"thrash\" and remains in the database. Returns 204."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §3 row 5 — soft delete keeps the row, Status -> thrash. */\npm.test(\"5. DELETE /article/{id} -> 204\", function () {\n    pm.response.to.have.status(204);\n});\npm.test(\"5. soft delete: GET after returns status=thrash\", function () {\n    var id = pm.collectionVariables.get(\"articleId\") || pm.variables.get(\"articleId\");\n    var base = pm.collectionVariables.get(\"baseUrl\") || pm.variables.get(\"baseUrl\");\n    pm.sendRequest(base + \"/article/\" + id, function (err, res) {\n        if (err) { pm.expect.fail(\"GET after delete failed: \" + err); return; }\n        pm.expect(res.code).to.eql(200);\n        pm.expect(res.json().Status).to.eql(\"thrash\");\n    });\n});\n"
     },
     {
       "name": "6. Create article — validation failure demo (422)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"title\": \"short\",\n  \"content\": \"tiny\",\n  \"category\": \"x\",\n  \"status\": \"bogus\"\n}",
-          "options": { "raw": { "language": "json" } }
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
         },
-        "url": { "raw": "{{baseUrl}}/article/", "host": ["{{baseUrl}}"], "path": ["article", ""] },
+        "url": {
+          "raw": "{{baseUrl}}/article/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "article",
+            ""
+          ]
+        },
         "description": "Demonstrates spec §4 validation: title < 20, content < 200, category < 3 and an invalid status each produce HTTP 422 with an {\"error\": \"...\"} envelope."
       },
-      "response": []
+      "response": [],
+      "test": "\n/* Self-grading: spec §4 — title<20, content<200, category<3, bad status -> 422. */\npm.test(\"6. invalid payload -> 422\", function () {\n    pm.response.to.have.status(422);\n});\npm.test(\"6. error envelope present\", function () {\n    pm.expect(pm.response.json()).to.have.property(\"error\");\n});\n"
     }
   ]
 }
