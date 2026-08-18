@@ -1,5 +1,5 @@
 -- 0001_create_posts.up.sql
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   `Id`           INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `Title`        VARCHAR(200) NOT NULL,
   `Content`      TEXT,
